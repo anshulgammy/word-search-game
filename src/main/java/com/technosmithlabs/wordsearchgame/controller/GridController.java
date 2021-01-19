@@ -16,7 +16,7 @@ public class GridController {
 
     public void generateGrid() {
         int gridSize = 10;
-        DifficultyLevelEnum difficultyLevel = DifficultyLevelEnum.MEDIUM;
+        DifficultyLevelEnum difficultyLevel = DifficultyLevelEnum.EXPERT;
         List<String> wordsList = Arrays.asList("ONE", "TWO", "THREE", "FOUR");
         gridGenerationService.generateGrid(gridSize, difficultyLevel, wordsList);
     }

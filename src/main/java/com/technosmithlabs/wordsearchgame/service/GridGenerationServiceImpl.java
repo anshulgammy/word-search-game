@@ -1,12 +1,15 @@
 package com.technosmithlabs.wordsearchgame.service;
 
-import com.technosmithlabs.wordsearchgame.model.*;
+import com.technosmithlabs.wordsearchgame.model.Coordinate;
+import com.technosmithlabs.wordsearchgame.model.DifficultyLevelEnum;
+import com.technosmithlabs.wordsearchgame.model.DirectionsEnum;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class GridGenerationServiceImpl implements GridGenerationService {
@@ -14,9 +17,10 @@ public class GridGenerationServiceImpl implements GridGenerationService {
     private char[][] gridContent;
     private int gridSize;
     private DifficultyLevelEnum difficultyLevel;
-    private List<DirectionsEnum> directions = new ArrayList<>();
+    private static final List<DirectionsEnum> directions = new ArrayList<>();
     private List<String> wordsList;
-    private List<Coordinate> coordinatesList = new ArrayList<>();
+    private static final List<Coordinate> coordinatesList = new ArrayList<>();
+    private static final String ALPHABETS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     @Override
     public void generateGrid(int gridSize, DifficultyLevelEnum difficultyLevel, List<String> wordsList) {
@@ -27,14 +31,12 @@ public class GridGenerationServiceImpl implements GridGenerationService {
         initializeEmptyGrid(this.gridContent);
         // initializing directions with respect to difficulty level.
         initializeDirectionsWrtDifficulty();
-        // shuffling the directions for the selected difficulty level.
-        Collections.shuffle(directions);
         // initializing all the possible grid coordinates in the list.
-        initializeGridCoordinates(coordinatesList);
-        // shuffling the grid coordinates so that every time a unique order is obtained when we start processing the grid.
-        Collections.shuffle(coordinatesList);
+        initializeGridCoordinates();
         // filling grid with provided words in random order.
         fillGridWithWords();
+        // filling empty spaces with random albhapets.
+        fillGridWithRandomLetters();
         System.out.println("Generating Grid...");
         printGeneratedGrid();
     }
@@ -49,116 +51,206 @@ public class GridGenerationServiceImpl implements GridGenerationService {
                 directions.addAll(Arrays.asList(DirectionsEnum.DIAGONAL,
                         DirectionsEnum.VERTICAL, DirectionsEnum.HORIZONTAL));
                 break;
-            /*case EXPERT:
-                directions = Arrays.asList(DirectionsEnum.HORIZONTAL,
+            case EXPERT:
+                directions.addAll(Arrays.asList(DirectionsEnum.HORIZONTAL,
                         DirectionsEnum.VERTICAL, DirectionsEnum.DIAGONAL,
                         DirectionsEnum.REVERSE_DIAGONAL,
-                        DirectionsEnum.REVERSE_HORIZONTAL, DirectionsEnum.REVERSE_VERTICAL);
-                break;*/
+                        DirectionsEnum.REVERSE_HORIZONTAL,
+                        DirectionsEnum.REVERSE_VERTICAL));
+                break;
         }
     }
 
     private void fillGridWithWords() {
         for (String word : wordsList) {
-            for (DirectionsEnum direction : directions) {
-                boolean isWordFilled = false;
-                for (Coordinate coordinate : coordinatesList) {
-                    int x = coordinate.getX();
-                    int y = coordinate.getY();
-                    switch (direction) {
+            boolean isWordFilled = false;
+            // shuffling the grid coordinates so that every time a unique order is obtained when we start processing the grid.
+            Collections.shuffle(coordinatesList);
+            for (Coordinate coordinate : coordinatesList) {
+                int x = coordinate.getX();
+                int y = coordinate.getY();
+                final DirectionsEnum correctDirection = getDirectionToFitWord(x, y,
+                        directions, word);
+                if (correctDirection != null) {
+                    switch (correctDirection) {
                         case HORIZONTAL:
-                            if(!checkIfWordFits(x, y, direction, word)) continue;
-                            else {
-                                for(int i = 0; i<word.length(); i++) {
-                                    y++;
-                                    gridContent[x][y] = word.charAt(i);
-                                }
-                                isWordFilled = true;
+                            for (int i = 0; i < word.length(); i++) {
+                                y++;
+                                gridContent[x][y] = word.charAt(i);
                             }
+                            isWordFilled = true;
                             break;
                         case VERTICAL:
-                            if(!checkIfWordFits(x, y, direction, word)) continue;
-                            else {
-                                for(int i = 0; i<word.length(); i++) {
-                                    x++;
-                                    gridContent[x][y] = word.charAt(i);
-                                }
-                                isWordFilled = true;
+                            for (int i = 0; i < word.length(); i++) {
+                                x++;
+                                gridContent[x][y] = word.charAt(i);
                             }
+                            isWordFilled = true;
                             break;
                         case DIAGONAL:
-                            if(!checkIfWordFits(x, y, direction, word)) continue;
-                            else {
-                                for(int i = 0; i<word.length(); i++) {
-                                    x++;
-                                    y++;
-                                    gridContent[x][y] = word.charAt(i);
-                                }
-                                isWordFilled = true;
+                            for (int i = 0; i < word.length(); i++) {
+                                x++;
+                                y++;
+                                gridContent[x][y] = word.charAt(i);
                             }
+                            isWordFilled = true;
                             break;
-                        /*case REVERSE_HORIZONTAL:
+                        case REVERSE_HORIZONTAL:
+                            for (int i = 0; i < word.length(); i++) {
+                                y--;
+                                gridContent[x][y] = word.charAt(i);
+                            }
+                            isWordFilled = true;
                             break;
                         case REVERSE_VERTICAL:
+                            for (int i = 0; i < word.length(); i++) {
+                                x--;
+                                gridContent[x][y] = word.charAt(i);
+                            }
+                            isWordFilled = true;
                             break;
                         case REVERSE_DIAGONAL:
-                            break;*/
+                            for (int i = 0; i < word.length(); i++) {
+                                x--;
+                                y--;
+                                gridContent[x][y] = word.charAt(i);
+                            }
+                            isWordFilled = true;
+                            break;
                     }
-                    if(isWordFilled) {
-                        break;
-                    }
+                } else {
+                    continue;
+                }
+                if (isWordFilled) {
+                    break;
                 }
             }
         }
     }
 
-    private boolean checkIfWordFits(int x, int y, DirectionsEnum direction, String word) {
-        switch (direction) {
-            case HORIZONTAL:
-                if (y + word.length() >= gridSize) {
-                    return false;
-                }
-                for (int i = y + 1; i < word.length(); i++) {
-                    if (gridContent[x][i] != '_') {
-                        return false;
+    private DirectionsEnum getDirectionToFitWord(int x, int y, List<DirectionsEnum> directions,
+                                                 String word) {
+        // shuffling the directions for the selected difficulty level.
+        Collections.shuffle(directions);
+        DirectionsEnum correctDirection = null;
+        for (DirectionsEnum direction : directions) {
+            boolean wasCurrentIterationValid = true;
+            int limitY = y + 1 + word.length();
+            int limitX = x + 1 + word.length();
+            int reverseLimitY = y - 1 - word.length();
+            int reverseLimitX = x - 1 - word.length();
+            switch (direction) {
+                case HORIZONTAL:
+                    if (limitY >= gridSize) {
+                        wasCurrentIterationValid = false;
+                        break;
                     }
-                }
-                break;
-            case VERTICAL:
-                if (x + word.length() >= gridSize) {
-                    return false;
-                }
-                for (int i = x + 1; i < word.length(); i++) {
-                    if (gridContent[i][y] != '_') {
-                        return false;
+                    for (int i = y + 1; i < limitY; i++) {
+                        if (gridContent[x][i] != '_') {
+                            wasCurrentIterationValid = false;
+                            break;
+                        }
                     }
-                }
-                break;
-            case DIAGONAL:
-                if (x + word.length() >= gridSize) {
-                    return false;
-                } else if (y + word.length() >= gridSize) {
-                    return false;
-                }
-                for (int i = 0; i < word.length(); i++) {
-                    x++;
-                    y++;
-                    if (gridContent[x][y] != '_') {
-                        return false;
+                    if (wasCurrentIterationValid) {
+                        correctDirection = DirectionsEnum.HORIZONTAL;
                     }
-                }
+                    break;
+                case VERTICAL:
+                    if (limitX >= gridSize) {
+                        wasCurrentIterationValid = false;
+                        break;
+                    }
+                    for (int i = x + 1; i < limitX; i++) {
+                        if (gridContent[i][y] != '_') {
+                            wasCurrentIterationValid = false;
+                            break;
+                        }
+                    }
+                    if (wasCurrentIterationValid) {
+                        correctDirection = DirectionsEnum.VERTICAL;
+                    }
+                    break;
+                case DIAGONAL:
+                    if (limitX >= gridSize) {
+                        wasCurrentIterationValid = false;
+                        break;
+                    } else if (limitY >= gridSize) {
+                        wasCurrentIterationValid = false;
+                        break;
+                    }
+                    for (int i = 0; i < word.length(); i++) {
+                        x++;
+                        y++;
+                        if (gridContent[x][y] != '_') {
+                            wasCurrentIterationValid = false;
+                            break;
+                        }
+                    }
+                    if (wasCurrentIterationValid) {
+                        correctDirection = DirectionsEnum.DIAGONAL;
+                    }
+                    break;
+                case REVERSE_HORIZONTAL:
+                    if (reverseLimitY < 0) {
+                        wasCurrentIterationValid = false;
+                        break;
+                    }
+                    for (int i = y - 1; i >= reverseLimitY; i--) {
+                        if (gridContent[x][i] != '_') {
+                            wasCurrentIterationValid = false;
+                            break;
+                        }
+                    }
+                    if (wasCurrentIterationValid) {
+                        correctDirection = DirectionsEnum.REVERSE_HORIZONTAL;
+                    }
+                    break;
+                case REVERSE_VERTICAL:
+                    if (reverseLimitX < 0) {
+                        wasCurrentIterationValid = false;
+                        break;
+                    }
+                    for (int i = x - 1; i >= reverseLimitX; i--) {
+                        if (gridContent[i][y] != '_') {
+                            wasCurrentIterationValid = false;
+                            break;
+                        }
+                    }
+                    if (wasCurrentIterationValid) {
+                        correctDirection = DirectionsEnum.REVERSE_VERTICAL;
+                    }
+                    break;
+                case REVERSE_DIAGONAL:
+                    if (reverseLimitX < 0) {
+                        wasCurrentIterationValid = false;
+                        break;
+                    } else if (reverseLimitY < 0) {
+                        wasCurrentIterationValid = false;
+                        break;
+                    }
+                    for (int i = 0; i < word.length(); i++) {
+                        x--;
+                        y--;
+                        if (gridContent[x][y] != '_') {
+                            wasCurrentIterationValid = false;
+                            break;
+                        }
+                    }
+                    if (wasCurrentIterationValid) {
+                        correctDirection = DirectionsEnum.REVERSE_DIAGONAL;
+                    }
+                    break;
+            }
+            if (correctDirection != null) {
                 break;
-            /*case REVERSE_HORIZONTAL:
-                break;
-            case REVERSE_VERTICAL:
-                break;
-            case REVERSE_DIAGONAL:
-                break;*/
+            } else {
+                continue;
+            }
         }
-        return true;
+        return correctDirection;
     }
 
-    private void initializeGridCoordinates(List<Coordinate> coordinatesList) {
+    private void initializeGridCoordinates() {
         for (int i = 0; i < gridSize; i++) {
             for (int j = 0; j < gridSize; j++) {
                 final Coordinate coordinate = new Coordinate();
@@ -182,6 +274,18 @@ public class GridGenerationServiceImpl implements GridGenerationService {
         for (int i = 0; i < gridSize; i++) {
             for (int j = 0; j < gridSize; j++) {
                 gridContent[i][j] = '_';
+            }
+        }
+    }
+
+    private void fillGridWithRandomLetters() {
+        for (int i = 0; i < gridSize; i++) {
+            for (int j = 0; j < gridSize; j++) {
+                if (gridContent[i][j] == '_') {
+                    int randomIndex = ThreadLocalRandom.current().nextInt(0,
+                            ALPHABETS.length());
+                    gridContent[i][j] = ALPHABETS.charAt(randomIndex);
+                }
             }
         }
     }

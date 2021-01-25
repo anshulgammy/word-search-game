@@ -230,7 +230,6 @@ public class GridGenerationServiceImpl implements GridGenerationService {
         final int gridSize = gridContent[0].length;
         final String alphabetsString = IntStream.rangeClosed('A', 'Z')
                 .mapToObj(c -> "" + (char) c).collect(Collectors.joining());
-        System.out.println(alphabetsString);
         for (int i = 0; i < gridSize; i++) {
             for (int j = 0; j < gridSize; j++) {
                 if (gridContent[i][j] == '_') {
